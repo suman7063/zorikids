@@ -1,4 +1,6 @@
 export { Colors } from "./colors";
+export { AGE_WORLDS, getAgeWorld } from "./ageThemes";
+export type { AgeWorld, AgeTheme } from "./ageThemes";
 
 export const Spacing = {
   xs: 4,

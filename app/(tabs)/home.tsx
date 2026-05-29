@@ -12,6 +12,8 @@ import { ActivityCard } from "../../src/components/ui/ActivityCard";
 import { StreakBadge } from "../../src/components/ui/StreakBadge";
 import { XPBar } from "../../src/components/ui/XPBar";
 import { Colors, ACTIVITY_META, AGE_GROUPS } from "../../src/theme";
+import { useAgeTheme } from "../../src/hooks/useAgeTheme";
+import BabyHome from "./baby-home";
 import type { ActivityType } from "../../src/types";
 
 const { width } = Dimensions.get("window");
@@ -45,6 +47,8 @@ function getGreeting() {
 }
 
 export default function HomeScreen() {
+  // ALL hooks must be at top — before any conditional return
+  const { isBaby } = useAgeTheme();
   const session = useAuthStore((s) => s.session);
   const activeChild = useChildStore((s) => s.activeChild);
   const streak = useChildStore((s) => s.streak);
@@ -88,6 +92,9 @@ export default function HomeScreen() {
       if (breakTimer.current) clearTimeout(breakTimer.current);
     };
   }, []);
+
+  // After all hooks — now safe to conditionally render
+  if (isBaby) return <BabyHome />;
 
   const level = Math.floor(totalXP / 200) + 1;
   const xpInLevel = totalXP % 200;
@@ -133,23 +140,23 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Today's featured activity */}
+          {/* Rhymes Feed Banner */}
           <View style={styles.section}>
-            <View style={styles.featuredCard}>
-              <View style={styles.featuredContent}>
-                <Text style={styles.featuredTag}>⭐ Today's Pick</Text>
-                <Text style={styles.featuredTitle}>Animal Kingdom Quiz</Text>
-                <Text style={styles.featuredSub}>Test your knowledge about animals!</Text>
-                <TouchableOpacity
-                  style={styles.featuredBtn}
-                  onPress={() => router.push("/activity/quiz/q1")}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.featuredBtnText}>Start Now →</Text>
-                </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.feedBanner, { backgroundColor: palette.primary }]}
+              onPress={() => router.push("/feed")}
+              activeOpacity={0.88}
+            >
+              <View style={styles.feedBannerLeft}>
+                <Text style={styles.feedTag}>🎵 Rhymes & Videos</Text>
+                <Text style={styles.feedTitle}>Watch & Learn</Text>
+                <Text style={styles.feedSub}>Swipe karo, video dekho, quiz karo!</Text>
+                <View style={styles.feedBtn}>
+                  <Text style={styles.feedBtnText}>▶  Play Now</Text>
+                </View>
               </View>
-              <Text style={styles.featuredEmoji}>🦁</Text>
-            </View>
+              <Text style={styles.feedEmoji}>🐘</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Quick Activities */}
@@ -271,26 +278,24 @@ const styles = StyleSheet.create({
   section: { paddingHorizontal: 24, marginTop: 24, gap: 14 },
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   sectionTitle: { fontSize: 20, fontWeight: "800" },
-  featuredCard: {
-    backgroundColor: Colors.light.primary,
+  feedBanner: {
     borderRadius: 24, padding: 20,
-    flexDirection: "row", justifyContent: "space-between",
-    alignItems: "center",
-    shadowColor: Colors.light.primary,
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35, shadowRadius: 16, elevation: 8,
+    shadowOpacity: 0.2, shadowRadius: 16, elevation: 8,
   },
-  featuredContent: { flex: 1, gap: 8 },
-  featuredTag: { fontSize: 12, color: "rgba(255,255,255,0.8)", fontWeight: "600" },
-  featuredTitle: { fontSize: 20, fontWeight: "800", color: "#FFF" },
-  featuredSub: { fontSize: 13, color: "rgba(255,255,255,0.8)" },
-  featuredBtn: {
+  feedBannerLeft: { flex: 1, gap: 6 },
+  feedTag:   { fontSize: 12, color: "rgba(255,255,255,0.85)", fontWeight: "600" },
+  feedTitle: { fontSize: 24, fontWeight: "900", color: "#FFF" },
+  feedSub:   { fontSize: 13, color: "rgba(255,255,255,0.8)" },
+  feedBtn: {
     backgroundColor: "rgba(255,255,255,0.25)",
     paddingHorizontal: 16, paddingVertical: 8,
     borderRadius: 12, alignSelf: "flex-start", marginTop: 4,
   },
-  featuredBtnText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
-  featuredEmoji: { fontSize: 60 },
+  feedBtnText: { color: "#FFF", fontWeight: "800", fontSize: 15 },
+  feedEmoji: { fontSize: 64 },
   quickRow: { flexDirection: "row", gap: 12, paddingRight: 24 },
   quickCard: {
     width: 90, borderRadius: 20, padding: 14,
