@@ -37,17 +37,44 @@ import { Audio } from "expo-av";
 
 let currentSound: Audio.Sound | null = null;
 
-export function playAnimalIntro(key: string, lang: "hindi" | "english" | "both"): void {
-  const meta = ANIMAL_META[key];
-  if (!meta) return;
+// nameHi/nameEn directly pass karo — DB se aata hai
+export function playAnimalIntro(
+  key: string,
+  nameHi: string,
+  nameEn: string,
+  lang: "hindi" | "english" | "both"
+): void {
   Speech.stop();
   const sentence = lang === "english"
-    ? `This is a ${meta.nameEn}. Listen to its sound.`
-    : `यह एक ${meta.nameHi} है। इसकी आवाज़ सुनो।`;
+    ? `This is a ${nameEn}. Listen to its sound.`
+    : `यह एक ${nameHi} है। इसकी आवाज़ सुनो।`;
   Speech.speak(sentence, {
     language: lang === "english" ? "en-IN" : "hi-IN",
     rate: 0.85,
   });
+}
+
+// URL se mp3 play karo (Supabase Storage)
+export async function playAnimalMp3FromUrl(url: string): Promise<void> {
+  try {
+    if (currentSound) {
+      await currentSound.stopAsync().catch(() => {});
+      await currentSound.unloadAsync().catch(() => {});
+      currentSound = null;
+    }
+    await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+    const { sound } = await Audio.Sound.createAsync({ uri: url }, { shouldPlay: true, volume: 1.0 });
+    currentSound = sound;
+    await new Promise<void>((resolve) => {
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          sound.unloadAsync().catch(() => {});
+          currentSound = null;
+          resolve();
+        }
+      });
+    });
+  } catch {}
 }
 
 export async function playAnimalMp3(key: string): Promise<void> {

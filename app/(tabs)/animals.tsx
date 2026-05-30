@@ -1,72 +1,55 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, Dimensions, Animated, Modal, Image,
+  ScrollView, Dimensions, Animated, Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Video, ResizeMode, AVPlaybackStatus } from "expo-av";
 import { useAgeTheme } from "../../src/hooks/useAgeTheme";
 import { useChildStore } from "../../src/stores/childStore";
-import { playAnimalSound, playAnimalIntro, playAnimalMp3, ANIMAL_META } from "../../src/lib/animalSounds";
-
-const VIDEOS: Record<string, any> = {
-  lion: require("../../assets/animations/animals/lion.mp4"),
-};
+import { supabase } from "../../src/lib/supabase";
+import { playAnimalIntro, playAnimalMp3FromUrl } from "../../src/lib/animalSounds";
 
 const MOUTH_OPEN_MS = 3000;
-
 const { width } = Dimensions.get("window");
 const CARD = (width - 56) / 3;
 
-const IMGS: Record<string, any> = {
-  cat:      require("../../assets/images/animals/cat.png"),
-  chick:    require("../../assets/images/animals/chick.png"),
-  cow:      require("../../assets/images/animals/cow.png"),
-  dog:      require("../../assets/images/animals/dog.png"),
-  elephant: require("../../assets/images/animals/elephant.png"),
-  frog:     require("../../assets/images/animals/frog.png"),
-  horse:    require("../../assets/images/animals/horse.png"),
-  lion:     require("../../assets/images/animals/lion.png"),
-  pig:      require("../../assets/images/animals/pig.png"),
+type Animal = {
+  id: string;
+  key: string;
+  name_hi: string;
+  name_en: string;
+  sound_word: string;
+  emoji: string;
+  bg: string;
+  accent: string;
+  video_url: string | null;
+  sound_url: string | null;
+  is_published: boolean;
 };
 
-const ANIMALS = [
-  { key: "elephant", emoji: "🐘", bg: "#E0F2FE", accent: "#0284C7" },
-  { key: "lion",     emoji: "🦁", bg: "#FEF9C3", accent: "#CA8A04" },
-  { key: "cow",      emoji: "🐮", bg: "#DCFCE7", accent: "#16A34A" },
-  { key: "dog",      emoji: "🐶", bg: "#FFF7ED", accent: "#EA580C" },
-  { key: "cat",      emoji: "🐱", bg: "#F5F3FF", accent: "#7C3AED" },
-  { key: "frog",     emoji: "🐸", bg: "#ECFDF5", accent: "#059669" },
-  { key: "duck",     emoji: "🦆", bg: "#EFF6FF", accent: "#2563EB" },
-  { key: "pig",      emoji: "🐷", bg: "#FFF0F6", accent: "#DB2777" },
-  { key: "horse",    emoji: "🐴", bg: "#FFF7ED", accent: "#B45309" },
-  { key: "chick",    emoji: "🐥", bg: "#FEFCE8", accent: "#D97706" },
-];
-
 function AnimalModal({ animal, visible, lang, onClose }: {
-  animal: typeof ANIMALS[0] | null;
+  animal: Animal | null;
   visible: boolean;
   lang: "hindi" | "english" | "both";
   onClose: () => void;
 }) {
-  const hasVideo    = animal ? !!VIDEOS[animal.key] : false;
+  const hasVideo    = !!(animal?.video_url);
   const soundPlayed = useRef(false);
-  const meta        = animal ? ANIMAL_META[animal.key] : null;
   const cardAnim    = useRef(new Animated.Value(0)).current;
   const imgAnim     = useRef(new Animated.Value(1)).current;
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!visible || !animal) return;
     soundPlayed.current = false;
     const langKey = lang === "both" ? "hindi" : lang;
 
     if (hasVideo) {
-      // Intro speech immediately; mp3 fires at mouth-open timestamp
-      playAnimalIntro(animal.key, langKey);
+      playAnimalIntro(animal.key, animal.name_hi, animal.name_en, langKey);
       return;
     }
 
-    // Image-only: existing card behavior
+    // Image/emoji fallback — play intro + sound then close
     cardAnim.setValue(0);
     imgAnim.setValue(1);
     Animated.spring(cardAnim, { toValue: 1, bounciness: 14, speed: 10, useNativeDriver: true }).start();
@@ -78,33 +61,35 @@ function AnimalModal({ animal, visible, lang, onClose }: {
     ).start();
 
     let alive = true;
-    playAnimalSound(animal.key, langKey).then(() => {
-      if (alive) setTimeout(onClose, 600);
-    });
+    playAnimalIntro(animal.key, animal.name_hi, animal.name_en, langKey);
+    if (animal.sound_url) {
+      playAnimalMp3FromUrl(animal.sound_url).then(() => {
+        if (alive) setTimeout(onClose, 600);
+      });
+    } else {
+      setTimeout(() => { if (alive) onClose(); }, 3000);
+    }
     return () => { alive = false; imgAnim.stopAnimation(); };
   }, [visible, animal?.key]);
 
   if (!animal) return null;
-  const img      = IMGS[animal.key];
-  const name     = lang === "english" ? meta?.nameEn : meta?.nameHi;
   const langKey = lang === "both" ? "hindi" : lang;
 
   function handlePlaybackStatus(status: AVPlaybackStatus) {
     if (!status.isLoaded) return;
     if (status.didJustFinish) { onClose(); return; }
-    if (!soundPlayed.current && status.positionMillis >= MOUTH_OPEN_MS) {
+    if (!soundPlayed.current && status.positionMillis >= MOUTH_OPEN_MS && animal?.sound_url) {
       soundPlayed.current = true;
-      playAnimalMp3(animal!.key);
+      playAnimalMp3FromUrl(animal.sound_url!);
     }
   }
 
-  // Full-screen video modal
   if (hasVideo) {
     return (
       <Modal visible={visible} transparent={false} animationType="fade" onRequestClose={onClose} statusBarTranslucent>
         <TouchableOpacity style={styles.fullScreen} activeOpacity={1} onPress={onClose}>
           <Video
-            source={VIDEOS[animal.key]}
+            source={{ uri: animal.video_url! }}
             style={StyleSheet.absoluteFill}
             resizeMode={ResizeMode.COVER}
             shouldPlay={visible}
@@ -117,21 +102,17 @@ function AnimalModal({ animal, visible, lang, onClose }: {
     );
   }
 
-  // Card modal for image-only animals
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <View style={styles.overlay}>
         <Animated.View style={[styles.modalCard, { backgroundColor: animal.bg, transform: [{ scale: cardAnim }] }]}>
           <Animated.View style={[styles.modalImgWrap, { transform: [{ scale: imgAnim }] }]}>
-            {img
-              ? <Image source={img} style={styles.modalImg} resizeMode="contain" />
-              : <Text style={styles.modalEmoji}>{animal.emoji}</Text>
-            }
+            <Text style={styles.modalEmoji}>{animal.emoji}</Text>
           </Animated.View>
           <View style={[styles.nameBar, { backgroundColor: animal.accent }]}>
-            <Text style={styles.nameText}>{name}</Text>
+            <Text style={styles.nameText}>{langKey === "english" ? animal.name_en : animal.name_hi}</Text>
           </View>
-          <Text style={[styles.soundWord, { color: animal.accent }]}>{meta?.soundWord}</Text>
+          <Text style={[styles.soundWord, { color: animal.accent }]}>{animal.sound_word}</Text>
         </Animated.View>
       </View>
     </Modal>
@@ -139,19 +120,36 @@ function AnimalModal({ animal, visible, lang, onClose }: {
 }
 
 export default function AnimalsScreen() {
-  const { theme } = useAgeTheme();
-  const activeChild = useChildStore((s) => s.activeChild);
-  const lang = (activeChild?.preferred_language ?? "hindi") as "hindi" | "english" | "both";
-  const [selected, setSelected] = useState<typeof ANIMALS[0] | null>(null);
+  const { theme }    = useAgeTheme();
+  const activeChild  = useChildStore((s) => s.activeChild);
+  const lang         = (activeChild?.preferred_language ?? "hindi") as "hindi" | "english" | "both";
+  const [animals, setAnimals]   = useState<Animal[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [selected, setSelected] = useState<Animal | null>(null);
 
-  const pressAnims = useRef(
-    ANIMALS.reduce((acc, a) => { acc[a.key] = new Animated.Value(1); return acc; }, {} as Record<string, Animated.Value>)
-  ).current;
+  const pressAnims = useRef<Record<string, Animated.Value>>({}).current;
 
-  function handleTap(animal: typeof ANIMALS[0]) {
+  useEffect(() => {
+    supabase
+      .from("animals")
+      .select("*")
+      .eq("is_published", true)
+      .order("name_en")
+      .then(({ data }) => {
+        const list = data ?? [];
+        list.forEach((a) => {
+          if (!pressAnims[a.id]) pressAnims[a.id] = new Animated.Value(1);
+        });
+        setAnimals(list);
+        setLoading(false);
+      });
+  }, []);
+
+  function handleTap(animal: Animal) {
+    if (!pressAnims[animal.id]) pressAnims[animal.id] = new Animated.Value(1);
     Animated.sequence([
-      Animated.spring(pressAnims[animal.key], { toValue: 0.88, bounciness: 0, useNativeDriver: true }),
-      Animated.spring(pressAnims[animal.key], { toValue: 1,    bounciness: 18, useNativeDriver: true }),
+      Animated.spring(pressAnims[animal.id], { toValue: 0.88, bounciness: 0, useNativeDriver: true }),
+      Animated.spring(pressAnims[animal.id], { toValue: 1,    bounciness: 18, useNativeDriver: true }),
     ]).start();
     setSelected(animal);
   }
@@ -167,29 +165,32 @@ export default function AnimalsScreen() {
           </View>
         </View>
 
-        <ScrollView contentContainerStyle={styles.grid} showsVerticalScrollIndicator={false}>
-          {ANIMALS.map((animal) => {
-            const meta = ANIMAL_META[animal.key];
-            const name = lang === "english" ? meta?.nameEn : meta?.nameHi;
-            const img  = IMGS[animal.key];
-            return (
-              <TouchableOpacity key={animal.key} onPress={() => handleTap(animal)} activeOpacity={0.85}>
-                <Animated.View style={[
-                  styles.card,
-                  { backgroundColor: animal.bg, shadowColor: animal.accent, transform: [{ scale: pressAnims[animal.key] }] },
-                ]}>
-                  {img
-                    ? <Image source={img} style={styles.cardImg} resizeMode="contain" />
-                    : <Text style={styles.cardEmoji}>{animal.emoji}</Text>
-                  }
-                  <View style={[styles.cardLabel, { backgroundColor: animal.accent }]}>
-                    <Text style={styles.cardLabelText}>{name}</Text>
-                  </View>
-                </Animated.View>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        {loading ? (
+          <View style={styles.loadingWrap}>
+            <Text style={styles.loadingText}>Loading...</Text>
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={styles.grid} showsVerticalScrollIndicator={false}>
+            {animals.map((animal) => {
+              if (!pressAnims[animal.id]) pressAnims[animal.id] = new Animated.Value(1);
+              return (
+                <TouchableOpacity key={animal.id} onPress={() => handleTap(animal)} activeOpacity={0.85}>
+                  <Animated.View style={[
+                    styles.card,
+                    { backgroundColor: animal.bg, shadowColor: animal.accent, transform: [{ scale: pressAnims[animal.id] }] },
+                  ]}>
+                    <Text style={styles.cardEmoji}>{animal.emoji}</Text>
+                    <View style={[styles.cardLabel, { backgroundColor: animal.accent }]}>
+                      <Text style={styles.cardLabelText}>
+                        {lang === "english" ? animal.name_en : animal.name_hi}
+                      </Text>
+                    </View>
+                  </Animated.View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
 
         <AnimalModal
           animal={selected}
@@ -221,10 +222,12 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.22, shadowRadius: 14, elevation: 8,
   },
-  cardImg:       { width: CARD, height: CARD },
-  cardEmoji:     { fontSize: 56 },
-  cardLabel:     { width: "100%", paddingVertical: 10, alignItems: "center", marginTop: 10 },
+  cardEmoji:     { fontSize: 56, marginBottom: 8 },
+  cardLabel:     { width: "100%", paddingVertical: 10, alignItems: "center", marginTop: 4 },
   cardLabelText: { color: "#FFF", fontWeight: "900", fontSize: 14 },
+  loadingWrap:   { flex: 1, alignItems: "center", justifyContent: "center" },
+  loadingText:   { fontSize: 16, color: "#9CA3AF" },
+  fullScreen:    { flex: 1, backgroundColor: "#000" },
   overlay: {
     flex: 1, backgroundColor: "rgba(0,0,0,0.6)",
     alignItems: "center", justifyContent: "center",
@@ -239,10 +242,8 @@ const styles = StyleSheet.create({
     width: width * 0.7, height: width * 0.7,
     alignItems: "center", justifyContent: "center",
   },
-  modalImg:   { width: "100%", height: "100%" },
   modalEmoji: { fontSize: 120 },
   nameBar:    { width: "100%", paddingVertical: 18, alignItems: "center", marginTop: 4 },
   nameText:   { color: "#FFF", fontSize: 32, fontWeight: "900" },
   soundWord:  { fontSize: 22, fontWeight: "900", marginTop: 16 },
-  fullScreen: { flex: 1, backgroundColor: "#000" },
 });
