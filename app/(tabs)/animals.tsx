@@ -4,9 +4,16 @@ import {
   ScrollView, Dimensions, Animated, Modal, Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Video, ResizeMode, AVPlaybackStatus } from "expo-av";
 import { useAgeTheme } from "../../src/hooks/useAgeTheme";
 import { useChildStore } from "../../src/stores/childStore";
-import { playAnimalSound, ANIMAL_META } from "../../src/lib/animalSounds";
+import { playAnimalSound, playAnimalIntro, playAnimalMp3, ANIMAL_META } from "../../src/lib/animalSounds";
+
+const VIDEOS: Record<string, any> = {
+  lion: require("../../assets/animations/animals/lion.mp4"),
+};
+
+const MOUTH_OPEN_MS = 3000;
 
 const { width } = Dimensions.get("window");
 const CARD = (width - 56) / 3;
@@ -42,54 +49,89 @@ function AnimalModal({ animal, visible, lang, onClose }: {
   lang: "hindi" | "english" | "both";
   onClose: () => void;
 }) {
-  const meta      = animal ? ANIMAL_META[animal.key] : null;
-  const cardAnim  = useRef(new Animated.Value(0)).current;
-  const imgAnim   = useRef(new Animated.Value(1)).current;
+  const hasVideo    = animal ? !!VIDEOS[animal.key] : false;
+  const soundPlayed = useRef(false);
+  const meta        = animal ? ANIMAL_META[animal.key] : null;
+  const cardAnim    = useRef(new Animated.Value(0)).current;
+  const imgAnim     = useRef(new Animated.Value(1)).current;
 
   React.useEffect(() => {
-    if (visible && animal && meta) {
-      cardAnim.setValue(0);
-      imgAnim.setValue(1);
+    if (!visible || !animal) return;
+    soundPlayed.current = false;
+    const langKey = lang === "both" ? "hindi" : lang;
 
-      Animated.spring(cardAnim, { toValue: 1, bounciness: 14, speed: 10, useNativeDriver: true }).start();
-
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(imgAnim, { toValue: 1.08, duration: 500, useNativeDriver: true }),
-          Animated.timing(imgAnim, { toValue: 1.0,  duration: 500, useNativeDriver: true }),
-        ])
-      ).start();
-
-      const langKey = lang === "both" ? "hindi" : lang;
-      let alive = true;
-      playAnimalSound(animal.key, langKey).then(() => {
-        if (alive) setTimeout(onClose, 600);
-      });
-      return () => { alive = false; imgAnim.stopAnimation(); };
+    if (hasVideo) {
+      // Intro speech immediately; mp3 fires at mouth-open timestamp
+      playAnimalIntro(animal.key, langKey);
+      return;
     }
+
+    // Image-only: existing card behavior
+    cardAnim.setValue(0);
+    imgAnim.setValue(1);
+    Animated.spring(cardAnim, { toValue: 1, bounciness: 14, speed: 10, useNativeDriver: true }).start();
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(imgAnim, { toValue: 1.08, duration: 500, useNativeDriver: true }),
+        Animated.timing(imgAnim, { toValue: 1.0,  duration: 500, useNativeDriver: true }),
+      ])
+    ).start();
+
+    let alive = true;
+    playAnimalSound(animal.key, langKey).then(() => {
+      if (alive) setTimeout(onClose, 600);
+    });
+    return () => { alive = false; imgAnim.stopAnimation(); };
   }, [visible, animal?.key]);
 
-  if (!animal || !meta) return null;
-  const name = lang === "english" ? meta.nameEn : meta.nameHi;
-  const img  = IMGS[animal.key];
+  if (!animal) return null;
+  const img      = IMGS[animal.key];
+  const name     = lang === "english" ? meta?.nameEn : meta?.nameHi;
+  const langKey = lang === "both" ? "hindi" : lang;
 
+  function handlePlaybackStatus(status: AVPlaybackStatus) {
+    if (!status.isLoaded) return;
+    if (status.didJustFinish) { onClose(); return; }
+    if (!soundPlayed.current && status.positionMillis >= MOUTH_OPEN_MS) {
+      soundPlayed.current = true;
+      playAnimalMp3(animal!.key);
+    }
+  }
+
+  // Full-screen video modal
+  if (hasVideo) {
+    return (
+      <Modal visible={visible} transparent={false} animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+        <TouchableOpacity style={styles.fullScreen} activeOpacity={1} onPress={onClose}>
+          <Video
+            source={VIDEOS[animal.key]}
+            style={StyleSheet.absoluteFill}
+            resizeMode={ResizeMode.COVER}
+            shouldPlay={visible}
+            isLooping={false}
+            isMuted={true}
+            onPlaybackStatusUpdate={handlePlaybackStatus}
+          />
+        </TouchableOpacity>
+      </Modal>
+    );
+  }
+
+  // Card modal for image-only animals
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <View style={styles.overlay}>
         <Animated.View style={[styles.modalCard, { backgroundColor: animal.bg, transform: [{ scale: cardAnim }] }]}>
-
           <Animated.View style={[styles.modalImgWrap, { transform: [{ scale: imgAnim }] }]}>
             {img
               ? <Image source={img} style={styles.modalImg} resizeMode="contain" />
               : <Text style={styles.modalEmoji}>{animal.emoji}</Text>
             }
           </Animated.View>
-
           <View style={[styles.nameBar, { backgroundColor: animal.accent }]}>
             <Text style={styles.nameText}>{name}</Text>
           </View>
-
-          <Text style={[styles.soundWord, { color: animal.accent }]}>{meta.soundWord}</Text>
+          <Text style={[styles.soundWord, { color: animal.accent }]}>{meta?.soundWord}</Text>
         </Animated.View>
       </View>
     </Modal>
@@ -202,4 +244,5 @@ const styles = StyleSheet.create({
   nameBar:    { width: "100%", paddingVertical: 18, alignItems: "center", marginTop: 4 },
   nameText:   { color: "#FFF", fontSize: 32, fontWeight: "900" },
   soundWord:  { fontSize: 22, fontWeight: "900", marginTop: 16 },
+  fullScreen: { flex: 1, backgroundColor: "#000" },
 });

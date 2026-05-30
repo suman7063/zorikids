@@ -7,6 +7,7 @@ import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../src/lib/supabase";
 import { useAuthStore } from "../../src/stores/authStore";
+import { useChildStore } from "../../src/stores/childStore";
 import { AGE_WORLDS, getAgeWorld } from "../../src/theme/ageThemes";
 
 // Age options
@@ -38,7 +39,8 @@ function midAge(world: WorldKey): number {
 }
 
 export default function SetupScreen() {
-  const setSession = useAuthStore((s) => s.setSession);
+  const setSession    = useAuthStore((s) => s.setSession);
+  const setActiveChild = useChildStore((s) => s.setActiveChild);
 
   // Parent
   const [parentName, setParentName] = useState("");
@@ -124,6 +126,8 @@ export default function SetupScreen() {
         longest_streak: 0,
         last_active_date: new Date().toISOString().split("T")[0],
       });
+      // ✅ Store mein immediately set karo — language instantly apply hogi
+      setActiveChild(childData);
     }
 
     setLoading(false);

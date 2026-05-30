@@ -37,6 +37,43 @@ import { Audio } from "expo-av";
 
 let currentSound: Audio.Sound | null = null;
 
+export function playAnimalIntro(key: string, lang: "hindi" | "english" | "both"): void {
+  const meta = ANIMAL_META[key];
+  if (!meta) return;
+  Speech.stop();
+  const sentence = lang === "english"
+    ? `This is a ${meta.nameEn}. Listen to its sound.`
+    : `यह एक ${meta.nameHi} है। इसकी आवाज़ सुनो।`;
+  Speech.speak(sentence, {
+    language: lang === "english" ? "en-IN" : "hi-IN",
+    rate: 0.85,
+  });
+}
+
+export async function playAnimalMp3(key: string): Promise<void> {
+  const file = SOUND_FILES[key];
+  if (!file) return;
+  try {
+    if (currentSound) {
+      await currentSound.stopAsync().catch(() => {});
+      await currentSound.unloadAsync().catch(() => {});
+      currentSound = null;
+    }
+    await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+    const { sound } = await Audio.Sound.createAsync(file, { shouldPlay: true, volume: 1.0 });
+    currentSound = sound;
+    await new Promise<void>((resolve) => {
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          sound.unloadAsync().catch(() => {});
+          currentSound = null;
+          resolve();
+        }
+      });
+    });
+  } catch {}
+}
+
 export async function playAnimalSound(
   key: string,
   lang: "hindi" | "english" | "both"
@@ -58,7 +95,7 @@ export async function playAnimalSound(
       rate: 0.85,
       onDone: resolve,
       onStopped: resolve,
-      onError: resolve,
+      onError: () => resolve(),
     });
   });
 
