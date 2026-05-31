@@ -5,7 +5,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-import { Video, ResizeMode, AVPlaybackStatus } from "expo-av";
+import { useVideoPlayer, VideoView } from "expo-video";
 import { useChildStore } from "../../src/stores/childStore";
 import { supabase } from "../../src/lib/supabase";
 import { playAnimalIntro, playAnimalMp3FromUrl } from "../../src/lib/animalSounds";
@@ -47,12 +47,39 @@ function AnimalModal({ animal, visible, lang, onClose }: {
   const cardAnim    = useRef(new Animated.Value(0)).current;
   const imgAnim     = useRef(new Animated.Value(1)).current;
 
+  const player = useVideoPlayer(
+    animal?.video_url ? { uri: animal.video_url } : null,
+    (p) => { p.muted = true; p.loop = false; }
+  );
+
   useEffect(() => {
     if (visible) {
       modalAnim.setValue(0);
       Animated.spring(modalAnim, { toValue: 1, bounciness: 0, speed: 14, useNativeDriver: true }).start();
     }
   }, [visible]);
+
+  useEffect(() => {
+    if (!player || !hasVideo || !visible) return;
+    soundPlayed.current = false;
+    setVideoReady(false);
+    player.play();
+
+    const statusSub = player.addListener("statusChange", ({ status }) => {
+      if (status === "readyToPlay") setVideoReady(true);
+    });
+    const endSub = player.addListener("playToEnd", () => {});
+
+    const interval = setInterval(() => {
+      if (!soundPlayed.current && player.currentTime * 1000 >= MOUTH_OPEN_MS && animal?.sound_url) {
+        soundPlayed.current = true;
+        playAnimalMp3FromUrl(animal.sound_url).then(() => onClose());
+        clearInterval(interval);
+      }
+    }, 200);
+
+    return () => { statusSub.remove(); endSub.remove(); clearInterval(interval); };
+  }, [player, visible, animal?.key]);
 
   useEffect(() => {
     if (!visible || !animal) return;
@@ -91,45 +118,25 @@ function AnimalModal({ animal, visible, lang, onClose }: {
   if (!animal) return null;
   const langKey = lang === "both" ? "hindi" : lang;
 
-  function handlePlaybackStatus(status: AVPlaybackStatus) {
-    if (!status.isLoaded) return;
-    if (status.didJustFinish) { onClose(); return; }
-    if (!soundPlayed.current && status.positionMillis >= MOUTH_OPEN_MS && animal?.sound_url) {
-      soundPlayed.current = true;
-      playAnimalMp3FromUrl(animal.sound_url!);
-    }
-  }
-
   if (hasVideo) {
     return (
       <Modal visible={visible} transparent={false} animationType="none" onRequestClose={onClose} statusBarTranslucent>
         <Animated.View style={[styles.fullScreen, { opacity: modalAnim }]}>
-          <TouchableOpacity style={styles.fullScreen} activeOpacity={1} onPress={onClose}>
-            {animal.image_url && (
-              <Animated.Image
+          <View style={styles.fullScreen}>
+            {animal.image_url && !videoReady && (
+              <Image
                 source={{ uri: animal.image_url }}
-                style={[StyleSheet.absoluteFill, {
-                  opacity: crossfade.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
-                }]}
+                style={StyleSheet.absoluteFill}
                 resizeMode="cover"
               />
             )}
-            <Animated.View style={[StyleSheet.absoluteFill, { opacity: crossfade }]}>
-              <Video
-                source={{ uri: animal.video_url! }}
-                style={StyleSheet.absoluteFill}
-                resizeMode={ResizeMode.COVER}
-                shouldPlay={visible}
-                isLooping={false}
-                isMuted={true}
-                onReadyForDisplay={() => {
-                  setVideoReady(true);
-                  Animated.timing(crossfade, { toValue: 1, duration: 600, useNativeDriver: true }).start();
-                }}
-                onPlaybackStatusUpdate={handlePlaybackStatus}
-              />
-            </Animated.View>
-          </TouchableOpacity>
+            <VideoView
+              player={player}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              nativeControls={false}
+            />
+          </View>
         </Animated.View>
       </Modal>
     );

@@ -47,10 +47,13 @@ export default function AnimalsPage() {
 
   async function uploadToStorage(file: File, bucket: string, key: string) {
     const ext  = file.name.split(".").pop();
-    const path = `${key}_${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from(bucket).upload(path, file);
+    const path = `${key}.${ext}`;
+    // upsert: true — same file overwrite karo, naya nahi banao
+    const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert: true });
     if (error) throw error;
-    return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+    const url = supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+    // Cache bust karo bina naya file banaye
+    return `${url}?t=${Date.now()}`;
   }
 
   async function addAnimal(e: React.FormEvent) {
