@@ -57,6 +57,8 @@ export function playAnimalIntro(
 // URL se mp3 play karo (Supabase Storage)
 export async function playAnimalMp3FromUrl(url: string): Promise<void> {
   try {
+    // Kisi bhi screen ki speech band karo pehle
+    Speech.stop();
     if (currentSound) {
       await currentSound.stopAsync().catch(() => {});
       await currentSound.unloadAsync().catch(() => {});

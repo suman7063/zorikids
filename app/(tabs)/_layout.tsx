@@ -2,18 +2,17 @@ import { Tabs } from "expo-router";
 import { Text, View } from "react-native";
 import { useAgeTheme } from "../../src/hooks/useAgeTheme";
 
-function TabIcon({ emoji, label, focused, color }: {
+function TabIcon({ emoji, focused, color }: {
   emoji: string; label: string; focused: boolean; color: string;
 }) {
   return (
-    <View style={{ alignItems: "center", gap: 2 }}>
-      <Text style={{ fontSize: focused ? 28 : 22 }}>{emoji}</Text>
-      <Text style={{
-        fontSize: 10, fontWeight: focused ? "800" : "500",
-        color: focused ? color : "#9CA3AF",
-      }}>
-        {label}
-      </Text>
+    <View style={{
+      alignItems: "center", justifyContent: "center",
+      width: focused ? 44 : 36, height: focused ? 44 : 36,
+      borderRadius: 22,
+      backgroundColor: focused ? color + "20" : "transparent",
+    }}>
+      <Text style={{ fontSize: focused ? 26 : 22 }}>{emoji}</Text>
     </View>
   );
 }
@@ -30,10 +29,10 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: "#FFFFFF",
           borderTopColor: theme.colors.border,
-          borderTopWidth: 2,
-          height: 82,
-          paddingBottom: 16,
-          paddingTop: 8,
+          borderTopWidth: 1,
+          height: 64,
+          paddingBottom: 6,
+          paddingTop: 6,
         },
         tabBarShowLabel: false,
       }}
@@ -66,6 +65,17 @@ export default function TabsLayout() {
           href: isBaby ? "/colors" : null,
           tabBarIcon: ({ focused }) => (
             <TabIcon emoji="🌈" label="Colors" focused={focused} color={primary} />
+          ),
+        }}
+      />
+
+      {/* ── Alphabets — Baby World only ── */}
+      <Tabs.Screen
+        name="alphabets"
+        options={{
+          href: isBaby ? "/alphabets" : null,
+          tabBarIcon: ({ focused }) => (
+            <TabIcon emoji="🔤" label="ABC" focused={focused} color={primary} />
           ),
         }}
       />

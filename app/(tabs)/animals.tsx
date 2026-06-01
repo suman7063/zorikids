@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View, Text, StyleSheet, TouchableOpacity,
   ScrollView, Dimensions, Animated, Modal, Image, RefreshControl, StatusBar,
@@ -8,9 +8,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useChildStore } from "../../src/stores/childStore";
 import { supabase } from "../../src/lib/supabase";
-import { playAnimalIntro, playAnimalMp3FromUrl } from "../../src/lib/animalSounds";
+import { playAnimalMp3FromUrl } from "../../src/lib/animalSounds";
 
-const MOUTH_OPEN_MS = 3000;
 const { width, height } = Dimensions.get("window");
 const CARD = (width - 48) / 2;
 
@@ -49,7 +48,7 @@ function AnimalModal({ animal, visible, lang, onClose }: {
 
   const player = useVideoPlayer(
     animal?.video_url ? { uri: animal.video_url } : null,
-    (p) => { p.muted = true; p.loop = false; }
+    (p) => { p.muted = false; p.loop = false; }
   );
 
   useEffect(() => {
@@ -61,24 +60,21 @@ function AnimalModal({ animal, visible, lang, onClose }: {
 
   useEffect(() => {
     if (!player || !hasVideo || !visible) return;
-    soundPlayed.current = false;
     setVideoReady(false);
+
+    // Seedha video play
     player.play();
 
     const statusSub = player.addListener("statusChange", ({ status }) => {
       if (status === "readyToPlay") setVideoReady(true);
     });
-    const endSub = player.addListener("playToEnd", () => {});
 
-    const interval = setInterval(() => {
-      if (!soundPlayed.current && player.currentTime * 1000 >= MOUTH_OPEN_MS && animal?.sound_url) {
-        soundPlayed.current = true;
-        playAnimalMp3FromUrl(animal.sound_url).then(() => onClose());
-        clearInterval(interval);
-      }
-    }, 200);
+    // Video khatam → modal close
+    const endSub = player.addListener("playToEnd", () => {
+      setTimeout(onClose, 500);
+    });
 
-    return () => { statusSub.remove(); endSub.remove(); clearInterval(interval); };
+    return () => { statusSub.remove(); endSub.remove(); };
   }, [player, visible, animal?.key]);
 
   useEffect(() => {
@@ -86,12 +82,8 @@ function AnimalModal({ animal, visible, lang, onClose }: {
     soundPlayed.current = false;
     setVideoReady(false);
     crossfade.setValue(0);
-    const langKey = lang === "both" ? "hindi" : lang;
 
-    if (hasVideo) {
-      playAnimalIntro(animal.key, animal.name_hi, animal.name_en, langKey);
-      return;
-    }
+    if (hasVideo) return; // video wala useEffect handle karega
 
     cardAnim.setValue(0);
     imgAnim.setValue(1);
@@ -103,8 +95,8 @@ function AnimalModal({ animal, visible, lang, onClose }: {
       ])
     ).start();
 
+    // No speech — sirf sound play karo
     let alive = true;
-    playAnimalIntro(animal.key, animal.name_hi, animal.name_en, langKey);
     if (animal.sound_url) {
       playAnimalMp3FromUrl(animal.sound_url).then(() => {
         if (alive) setTimeout(onClose, 600);

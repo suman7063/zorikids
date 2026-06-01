@@ -4,8 +4,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 const NAV = [
-  { href: "/dashboard",         label: "Overview",  icon: "📊" },
-  { href: "/dashboard/animals", label: "Animals",   icon: "🐾" },
+  { href: "/dashboard",            label: "Overview",   icon: "📊" },
+  { href: "/dashboard/animals",    label: "Animals",    icon: "🐾" },
+  { href: "/dashboard/alphabets",  label: "Alphabets",  icon: "🔤" },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
